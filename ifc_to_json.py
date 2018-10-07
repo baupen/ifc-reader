@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-from ifc_types import IFCSpace
 
 ifc_path = sys.argv[1]
 
