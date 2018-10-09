@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import json
 
 ifc_path = sys.argv[1]
 
@@ -21,13 +22,11 @@ def parse_file(text):
     return output
 
 def get_attributes(string, obj):
-    print(obj)
     if string in ['IFCCARTESIANPOINT', 'IFCDIRECTION']:
         return [obj[len(string)+1:-1]]
     elif string == 'IFCPOLYLINE':
         return obj[len(string)+2:-2].split(',')
     tmp =  obj[len(string)+1:-1].split(',')
-    #print(string, tmp)
     return tmp
 
 
@@ -79,14 +78,12 @@ def process_ifcaxis2placement2d(ifcaxis2placement2d):
     rotationAngle = angle if refDirection[1] < 0 else -1 * angle
     R = np.zeros((2,2))
     cos = np.cos(rotationAngle)
-    sin = np.cos(rotationAngle)
+    sin = np.sin(rotationAngle)
     R[0,0] = cos
     R[1,1] = cos
     R[0,1] = -sin
     R[1,0] = sin
-
-
-    return location
+    return location, R
 
 
 def process_ifcaxis2placement(ifcaxis2placement):
@@ -140,11 +137,14 @@ def process_ifcrectangleprofiledef(ifcrectangleprofiledef):
     yDim = attributes[4]
 
     assert profileType == '.AREA.', "so far only areas are supported and not " + profileType
-    position = process_ifcaxis2placement(ifcobjects[position])
+    position, rotationMatrix = process_ifcaxis2placement(ifcobjects[position])
     xDim = float(xDim)
     yDim = float(yDim)
 
-    return [position, position + np.array([xDim, 0.]), position + np.array([xDim, 0.]) + np.array([0., yDim]), position + np.array([0., yDim]), position]
+    localPoints = [np.array([xDim/2, yDim/2]), np.array([-xDim/2, yDim/2]), np.array([-xDim/2, -yDim/2]), np.array([xDim/2, -yDim/2])]
+    
+    totalPoints = list(map(lambda x: np.matmul(rotationMatrix,x)+position, localPoints))
+    return totalPoints
 
 
 
@@ -202,7 +202,7 @@ def process_ifcproductrepresentationshape(ifcproductrepresentationshape):
     assert ifcproductrepresentationshape.startswith('IFCPRODUCTDEFINITIONSHAPE'), ifcproductrepresentationshape
     attributes = get_attributes('IFCPRODUCTDEFINITIONSHAPE', ifcproductrepresentationshape)
     
-    # On the one floor we had at the beginning each list only has one element
+    # In the provided file, each list only has one element
     representations = attributes[2][1:-1]
     return process_ifcshaperepresentation(ifcobjects[representations])
     
@@ -221,29 +221,96 @@ def process_ifcspace(ifcspace):
     assert ifcspace.startswith('IFCSPACE'), ifcspace
     attributes = get_attributes('IFCSPACE', ifcspace)
 
+    name = attributes[2]
     objectPlacement = attributes[5]
     representation = attributes[6]
     longName = attributes[7]
 
     objectPlacement = process_ifclocalplacement(ifcobjects[objectPlacement])
     representation = process_ifcproductrepresentation(ifcobjects[representation])
-    if representation is None:
-        print(ifcspace, "has None as output and has name", longName)
-    list(map(lambda x: print(x), map(lambda x: np.append(x, [0.]) + objectPlacement, representation)))
+
+    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))
+    return listofpoints, longName, name
 
 
+
+
+
+def extractMinMax(spaces):
+    minimum = np.ones(3) * np.Inf
+    maximum = np.ones(3) * -np.Inf
+    for space in spaces:
+        for point in space:
+            minimum = np.minimum(minimum, point)
+            maximum = np.maximum(maximum, point)
+    return minimum, maximum
 
 
 with open(ifc_path, 'r', encoding='utf-8') as ifc:
     global ifcobjects 
     ifcobjects = parse_file(ifc.read())
-    print(ifcobjects['#5'])
-    spaces = []    
+    
+    allspaces = []
+    allnames = []
+    allidentifiers = []
     for key in ifcobjects:
-        if 'IFCSPACE' in ifcobjects[key]: 
-            spaces.append(key)
-            process_ifcspace(ifcobjects[key])
-            print('\n\n')
+        if 'IFCSPACE' in ifcobjects[key]:
+            listofpoints, name, identifier = process_ifcspace(ifcobjects[key])
+            allspaces.append(listofpoints)
+            allnames.append(name)
+            allidentifiers.append(identifier)
+    
+    minimum, maximum = extractMinMax(allspaces)
+    for i in range(len(allspaces)):
+        for j in range(len(allspaces[i])):
+            allspaces[i][j] -= minimum
+            allspaces[i][j] = np.divide(allspaces[i][j][:2], (maximum-minimum)[:2])
+    
+
+    allobjects = []
+    for i in range(len(allspaces)):
+        points = list(map(lambda point: {"x":point[0], "y":point[1]}, allspaces[i]))
+        allobjects.append({"identifier":allidentifiers[i], "name":allnames[i], "points":points})
+    
+    with open("output.json", 'w') as outfile:
+        json.dump(allobjects, outfile)
+
+
+
+
+
+    # ifcobjects = parse_file(ifc.read())
+    # print(ifcobjects['#5'])
+    # spaces = []
+    # spacesPoints = []
+    # names = []    
+    # for key in ifcobjects:
+    #     if 'IFCSPACE' in ifcobjects[key]: 
+    #         spaces.append(key)
+    #         tmp1, longName = process_ifcspace(ifcobjects[key])
+    #         spacesPoints.append(tmp1)
+    #         names.append(longName)
+    #         print('\n\n')
+    
+    # minimum, maximum = extractMinMax(spacesPoints)
+    # for i in range(len(spacesPoints)):
+    #     for j in range(len(spacesPoints[i])):
+    #         spacesPoints[i][j] -= minimum
+    #         spacesPoints[i][j] = np.divide(spacesPoints[i][j], maximum-minimum) * 100
+
+    # laufVariable = 0
+    # for space in spacesPoints:
+    #     print(names[laufVariable])
+    #     kleinst = np.ones(2) * 1000
+    #     grösst = np.ones(2) * -1
+    #     for point in space:
+    #         kleinst = np.minimum(kleinst, point[:2])
+    #         grösst = np.maximum(grösst, point[:2])
+    #     print(kleinst)
+    #     print(grösst)
+    #     print('\n\n')
+    #     laufVariable += 1
+
     
     #process_ifcspace(ifcobjects[spaces[-1]])
     
