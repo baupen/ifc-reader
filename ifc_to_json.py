@@ -2,6 +2,7 @@ import sys
 import numpy as np
 import json
 import re
+import os
 
 ifc_path = sys.argv[1]
 
@@ -230,7 +231,7 @@ def process_ifcspace(ifcspace):
     objectPlacement = process_ifclocalplacement(ifcobjects[objectPlacement])
     representation = process_ifcproductrepresentation(ifcobjects[representation])
 
-    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))
+    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))[:-1]
     return listofpoints, longName, name
 
 
@@ -279,14 +280,13 @@ with open(ifc_path, 'r', encoding='utf-8') as ifc:
         for j in range(len(allspaces[i])):
             allspaces[i][j] -= minimum
             allspaces[i][j] = np.divide(allspaces[i][j][:2], (maximum-minimum)[:2])
-    
 
     allobjects = []
     for i in range(len(allspaces)):
         points = list(map(lambda point: {"x":point[0], "y":point[1]}, allspaces[i]))
         allobjects.append({"identifier":allidentifiers[i], "name":allnames[i], "points":points})
     
-    with open("output.json", 'w', encoding="utf8") as outfile:
+    with open(ifc_path + ".json", 'w', encoding="utf8") as outfile:
         json.dump(allobjects, outfile, ensure_ascii=False, indent=4)
 
 
