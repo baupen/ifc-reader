@@ -3,16 +3,24 @@ import sys
 import json
 
 json_path = sys.argv[1]
+x_size = 1920
+y_size = 1080
 
-img = Image.new('RGB', (1920, 1080), 'white')
+# background
+img = Image.new('RGBA', (x_size, y_size), 'white')
 
-draw = ImageDraw.Draw(img)
-
+# foregroup
+tmp = Image.new('RGBA', img.size, 'white')
+draw = ImageDraw.Draw(tmp)
 with open(json_path) as json_file:
+    # draw rectangles as given by points
     data = json.load(json_file)
     for entry in data:
-        
-        draw.line((0, 0) + im.size, fill=128)
-        draw.line((0, im.size[1], im.size[0], 0), fill=128)
+        line = []
+        for point in entry["points"]:
+            line.append((int(point["x"]*x_size), int(point["y"]*y_size)))
+        draw.polygon(line, fill=(128, 128, 128, 230))
 
+# merge images
+img = Image.alpha_composite(img, tmp)
 img.save(json_path + ".png", "PNG")
