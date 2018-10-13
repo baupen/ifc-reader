@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import json
+import re
 
 ifc_path = sys.argv[1]
 
@@ -224,7 +225,7 @@ def process_ifcspace(ifcspace):
     name = attributes[2]
     objectPlacement = attributes[5]
     representation = attributes[6]
-    longName = attributes[7]
+    longName = parse_name(attributes[7])
 
     objectPlacement = process_ifclocalplacement(ifcobjects[objectPlacement])
     representation = process_ifcproductrepresentation(ifcobjects[representation])
@@ -233,8 +234,21 @@ def process_ifcspace(ifcspace):
     return listofpoints, longName, name
 
 
-
-
+# attempts to remove any invalid chars
+def parse_name(name):
+    # matches \X2\00FF\X0\
+    prog = re.compile(r"\\X2\\"+ "([0-9A-F]{4})" + r"\\X0\\")
+    while True:
+        result = prog.search(name)
+        if not result:
+            break
+        else:
+            # unicode found; replace with correct character
+            uni = result.group(1)
+            char = chr(int(uni, 16))
+            name = name.replace("\\X2\\"+ uni + "\\X0\\", char)
+        
+    return name
 
 def extractMinMax(spaces):
     minimum = np.ones(3) * np.Inf
@@ -272,9 +286,8 @@ with open(ifc_path, 'r', encoding='utf-8') as ifc:
         points = list(map(lambda point: {"x":point[0], "y":point[1]}, allspaces[i]))
         allobjects.append({"identifier":allidentifiers[i], "name":allnames[i], "points":points})
     
-    with open("output.json", 'w') as outfile:
-        json.dump(allobjects, outfile)
-
+    with open("output.json", 'w', encoding="utf8") as outfile:
+        json.dump(allobjects, outfile, ensure_ascii=False, indent=4)
 
 
 
