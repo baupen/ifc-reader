@@ -3,8 +3,8 @@ import sys
 import json
 
 json_path = sys.argv[1]
-x_size = 1920
-y_size = 1080
+x_size = 600
+y_size = 800
 
 # background
 img = Image.new('RGBA', (x_size, y_size), 'white')

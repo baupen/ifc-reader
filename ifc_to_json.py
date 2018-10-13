@@ -6,8 +6,6 @@ import os
 
 ifc_path = sys.argv[1]
 
-
-
 def parse_file(text):
     """
     text is the string of the whole file. It will be split at every ";" and then all "\n" will be removed
@@ -231,7 +229,11 @@ def process_ifcspace(ifcspace):
     objectPlacement = process_ifclocalplacement(ifcobjects[objectPlacement])
     representation = process_ifcproductrepresentation(ifcobjects[representation])
 
-    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))[:-1]
+    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))
+    # remove double points
+    if listofpoints[0][0] == listofpoints[len(listofpoints) - 1][0] and listofpoints[0][1] == listofpoints[len(listofpoints) - 1][1]:
+        print("found")
+        listofpoints = listofpoints[:-1]
     return listofpoints, longName, name
 
 
