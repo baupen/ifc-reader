@@ -232,8 +232,12 @@ def process_ifcspace(ifcspace):
     listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))
     # remove double points
     if listofpoints[0][0] == listofpoints[len(listofpoints) - 1][0] and listofpoints[0][1] == listofpoints[len(listofpoints) - 1][1]:
-        print("found")
         listofpoints = listofpoints[:-1]
+
+    # invert x
+    for i in range(0, len(listofpoints)):
+        listofpoints[i][1] = 1 - listofpoints[i][1]
+
     return listofpoints, longName, name
 
 
