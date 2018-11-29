@@ -4,7 +4,7 @@ import json
 import re
 import os
 
-ifc_path = sys.argv[1]
+
 
 def parse_file(text):
     """
@@ -17,16 +17,17 @@ def parse_file(text):
             continue
         firstequal = item.find('=')
         identifier = item[:firstequal].strip()
-        obj        = item[firstequal+1:].strip()
+        obj = item[firstequal + 1:].strip()
         output[identifier] = obj
     return output
 
+
 def get_attributes(string, obj):
     if string in ['IFCCARTESIANPOINT', 'IFCDIRECTION']:
-        return [obj[len(string)+1:-1]]
+        return [obj[len(string) + 1:-1]]
     elif string == 'IFCPOLYLINE':
-        return obj[len(string)+2:-2].split(',')
-    tmp =  obj[len(string)+1:-1].split(',')
+        return obj[len(string) + 2:-2].split(',')
+    tmp = obj[len(string) + 1:-1].split(',')
     return tmp
 
 
@@ -35,10 +36,12 @@ def process_ifccartesianpoint(ifccartesianpoint):
     attributes = get_attributes('IFCCARTESIANPOINT', ifccartesianpoint)
     return np.array(eval(attributes[0]))
 
+
 def process_ifcdirection(ifcdirection):
     assert ifcdirection.startswith('IFCDIRECTION')
     attributes = get_attributes('IFCDIRECTION', ifcdirection)
     return np.array(eval(attributes[0]))
+
 
 def process_ifcaxis2placement3d(ifcaxis2placement3d):
     assert ifcaxis2placement3d.startswith('IFCAXIS2PLACEMENT3D')
@@ -50,14 +53,15 @@ def process_ifcaxis2placement3d(ifcaxis2placement3d):
 
     location = process_ifccartesianpoint(ifcobjects[location])
     if '$' in axis:
-        axis = np.array([0.,0.,1.])
+        axis = np.array([0., 0., 1.])
     else:
         axis = process_ifcdirection(ifcobjects[axis])
     if '$' in refDirection:
-        refDirection = np.array([1.,0.,0.])
+        refDirection = np.array([1., 0., 0.])
     else:
         refDirection = process_ifcdirection(ifcobjects[refDirection])
     return location
+
 
 def process_ifcaxis2placement2d(ifcaxis2placement2d):
     assert ifcaxis2placement2d.startswith('IFCAXIS2PLACEMENT2D')
@@ -76,13 +80,13 @@ def process_ifcaxis2placement2d(ifcaxis2placement2d):
     refDirection = refDirection / np.linalg.norm(refDirection)
     angle = np.arccos(refDirection[0])
     rotationAngle = angle if refDirection[1] < 0 else -1 * angle
-    R = np.zeros((2,2))
+    R = np.zeros((2, 2))
     cos = np.cos(rotationAngle)
     sin = np.sin(rotationAngle)
-    R[0,0] = cos
-    R[1,1] = cos
-    R[0,1] = -sin
-    R[1,0] = sin
+    R[0, 0] = cos
+    R[1, 1] = cos
+    R[0, 1] = -sin
+    R[1, 0] = sin
     return location, R
 
 
@@ -93,6 +97,7 @@ def process_ifcaxis2placement(ifcaxis2placement):
         return process_ifcaxis2placement3d(ifcaxis2placement)
     else:
         assert 0, 'something went horribly wrong with ' + ifcaxis2placement
+
 
 def process_ifclocalplacement(ifclocalplacement):
     assert ifclocalplacement.startswith('IFCLOCALPLACEMENT'), 'relative origin only works with IFCLOCALPLACEMENT'
@@ -105,7 +110,7 @@ def process_ifclocalplacement(ifclocalplacement):
         placementRelTo = np.zeros(3)
     else:
         placementRelTo = process_ifclocalplacement(ifcobjects[placementRelTo])
-    
+
     relativePlacemnet = process_ifcaxis2placement(ifcobjects[relativePlacemnet])
 
     return placementRelTo + relativePlacemnet
@@ -114,6 +119,8 @@ def process_ifclocalplacement(ifclocalplacement):
 def process_ifcpolyline(ifcpolyline):
     assert ifcpolyline.startswith('IFCPOLYLINE'), ifcpolyline
     attributes = get_attributes('IFCPOLYLINE', ifcpolyline)
+    if attributes[0] != attributes[-1]:
+        attributes.append(attributes[0])
     ifccartesianpoints = map(lambda point: ifcobjects[point], attributes)
     points = list(map(lambda ifccartesianpoint: process_ifccartesianpoint(ifccartesianpoint), ifccartesianpoints))
     return points
@@ -141,15 +148,16 @@ def process_ifcrectangleprofiledef(ifcrectangleprofiledef):
     xDim = float(xDim)
     yDim = float(yDim)
 
-    localPoints = [np.array([xDim/2, yDim/2]), np.array([-xDim/2, yDim/2]), np.array([-xDim/2, -yDim/2]), np.array([xDim/2, -yDim/2])]
-    
-    totalPoints = list(map(lambda x: np.matmul(rotationMatrix,x)+position, localPoints))
+    localPoints = [np.array([xDim / 2, yDim / 2]), np.array([-xDim / 2, yDim / 2]), np.array([-xDim / 2, -yDim / 2]),
+                   np.array([xDim / 2, -yDim / 2])]
+    localPoints.append(localPoints[0])
+    totalPoints = list(map(lambda x: np.matmul(rotationMatrix, x) + position, localPoints))
     return totalPoints
 
 
-
 def process_ifcarbitraryprofiledefwithvoids(ifcarbitraryprofiledefwithvoids):
-    assert ifcarbitraryprofiledefwithvoids.startswith('IFCARBITRARYPROFILEDEFWITHVOIDS'), ifcarbitraryprofiledefwithvoids
+    assert ifcarbitraryprofiledefwithvoids.startswith(
+        'IFCARBITRARYPROFILEDEFWITHVOIDS'), ifcarbitraryprofiledefwithvoids
     attributes = get_attributes('IFCARBITRARYPROFILEDEFWITHVOIDS', ifcarbitraryprofiledefwithvoids)
 
     profileType = attributes[0]
@@ -184,9 +192,10 @@ def process_ifcextrudedareasolid(ifcextrudedareasolid):
 
     sweptArea = process_ifcprofiledef(ifcobjects[sweptArea])
     position = process_ifcaxis2placement3d(ifcobjects[position])
-    assert np.array_equal(position, np.array([0.,0.,0.]))
+    assert position[2] == 0, position
+    sweptArea = sweptArea + position[:2]
     extrudedDirection = process_ifcdirection(ifcobjects[extrudedDirection])
-    assert np.array_equal(extrudedDirection, np.array([0.,0.,1.]))
+    assert np.array_equal(extrudedDirection, np.array([0., 0., 1.]))
     return sweptArea
 
 
@@ -201,11 +210,10 @@ def process_ifcshaperepresentation(ifcshaperepresentation):
 def process_ifcproductrepresentationshape(ifcproductrepresentationshape):
     assert ifcproductrepresentationshape.startswith('IFCPRODUCTDEFINITIONSHAPE'), ifcproductrepresentationshape
     attributes = get_attributes('IFCPRODUCTDEFINITIONSHAPE', ifcproductrepresentationshape)
-    
+
     # In the provided file, each list only has one element
     representations = attributes[2][1:-1]
     return process_ifcshaperepresentation(ifcobjects[representations])
-    
 
 
 def process_ifcproductrepresentation(ifcproductrepresentation):
@@ -229,22 +237,14 @@ def process_ifcspace(ifcspace):
     objectPlacement = process_ifclocalplacement(ifcobjects[objectPlacement])
     representation = process_ifcproductrepresentation(ifcobjects[representation])
 
-    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))
-    # remove double points
-    if listofpoints[0][0] == listofpoints[len(listofpoints) - 1][0] and listofpoints[0][1] == listofpoints[len(listofpoints) - 1][1]:
-        listofpoints = listofpoints[:-1]
-
-    # invert x
-    for i in range(0, len(listofpoints)):
-        listofpoints[i][1] = 1 - listofpoints[i][1]
-
+    listofpoints = list(map(lambda x: np.append(x, [0.]) + objectPlacement, representation))[:-1]
     return listofpoints, longName, name
 
 
 # attempts to remove any invalid chars
 def parse_name(name):
     # matches \X2\00FF\X0\
-    prog = re.compile(r"\\X2\\"+ "([0-9A-F]{4})" + r"\\X0\\")
+    prog = re.compile(r"\\X2\\" + "([0-9A-F]{4})" + r"\\X0\\")
     while True:
         result = prog.search(name)
         if not result:
@@ -253,9 +253,10 @@ def parse_name(name):
             # unicode found; replace with correct character
             uni = result.group(1)
             char = chr(int(uni, 16))
-            name = name.replace("\\X2\\"+ uni + "\\X0\\", char)
-        
+            name = name.replace("\\X2\\" + uni + "\\X0\\", char)
+
     return name
+
 
 def extractMinMax(spaces):
     minimum = np.ones(3) * np.Inf
@@ -267,69 +268,45 @@ def extractMinMax(spaces):
     return minimum, maximum
 
 
-with open(ifc_path, 'r', encoding='utf-8') as ifc:
-    global ifcobjects 
-    ifcobjects = parse_file(ifc.read())
-    
-    allspaces = []
-    allnames = []
-    allidentifiers = []
-    for key in ifcobjects:
-        if 'IFCSPACE' in ifcobjects[key]:
-            listofpoints, name, identifier = process_ifcspace(ifcobjects[key])
-            allspaces.append(listofpoints)
-            allnames.append(name)
-            allidentifiers.append(identifier)
-    
-    minimum, maximum = extractMinMax(allspaces)
-    for i in range(len(allspaces)):
-        for j in range(len(allspaces[i])):
-            allspaces[i][j] -= minimum
-            allspaces[i][j] = np.divide(allspaces[i][j][:2], (maximum-minimum)[:2])
+def run_conversion(ifc_path):
+    with open(ifc_path, 'r', encoding='utf-8') as ifc:
+        global ifcobjects
+        ifc_file_read = ifc.read()
+        ifcobjects = parse_file(ifc_file_read)
 
-    allobjects = []
-    for i in range(len(allspaces)):
-        points = list(map(lambda point: {"x":point[0], "y":point[1]}, allspaces[i]))
-        allobjects.append({"identifier":allidentifiers[i], "name":allnames[i], "points":points})
-    
-    with open(ifc_path + ".json", 'w', encoding="utf8") as outfile:
-        json.dump(allobjects, outfile, ensure_ascii=False, indent=4)
+        allspaces = []
+        allnames = []
+        allidentifiers = []
+        for key in ifcobjects:
+            if 'IFCSPACE' in ifcobjects[key]:
+                listofpoints, name, identifier = process_ifcspace(ifcobjects[key])
+                listofpoints = list(map(lambda p: p * np.array([1, -1, 1]), listofpoints))
+                allspaces.append(listofpoints)
+                allnames.append(name)
+                allidentifiers.append(identifier)
+
+        minimum, maximum = extractMinMax(allspaces)
+        for i in range(len(allspaces)):
+            for j in range(len(allspaces[i])):
+                allspaces[i][j] -= minimum
+                allspaces[i][j] = np.divide(allspaces[i][j][:2], (maximum - minimum)[:2])
+
+        allobjects = []
+        for i in range(len(allspaces)):
+            points = list(map(lambda point: {"x": point[0], "y": point[1]}, allspaces[i]))
+            allobjects.append({"identifier": allidentifiers[i], "name": allnames[i], "points": points})
+
+        import hashlib
+
+        final_output = {
+            "hash": hashlib.sha256(ifc_file_read.encode('utf-8')).hexdigest(),
+            "floor": allobjects
+        }
+
+        with open(ifc_path + ".json", 'w', encoding="utf8") as outfile:
+            json.dump(final_output, outfile, ensure_ascii=False, indent=4)
 
 
-
-
-    # ifcobjects = parse_file(ifc.read())
-    # print(ifcobjects['#5'])
-    # spaces = []
-    # spacesPoints = []
-    # names = []    
-    # for key in ifcobjects:
-    #     if 'IFCSPACE' in ifcobjects[key]: 
-    #         spaces.append(key)
-    #         tmp1, longName = process_ifcspace(ifcobjects[key])
-    #         spacesPoints.append(tmp1)
-    #         names.append(longName)
-    #         print('\n\n')
-    
-    # minimum, maximum = extractMinMax(spacesPoints)
-    # for i in range(len(spacesPoints)):
-    #     for j in range(len(spacesPoints[i])):
-    #         spacesPoints[i][j] -= minimum
-    #         spacesPoints[i][j] = np.divide(spacesPoints[i][j], maximum-minimum) * 100
-
-    # laufVariable = 0
-    # for space in spacesPoints:
-    #     print(names[laufVariable])
-    #     kleinst = np.ones(2) * 1000
-    #     grösst = np.ones(2) * -1
-    #     for point in space:
-    #         kleinst = np.minimum(kleinst, point[:2])
-    #         grösst = np.maximum(grösst, point[:2])
-    #     print(kleinst)
-    #     print(grösst)
-    #     print('\n\n')
-    #     laufVariable += 1
-
-    
-    #process_ifcspace(ifcobjects[spaces[-1]])
-    
+if __name__ == '__main__':
+    ifc_path = sys.argv[1]
+    run_conversion(ifc_path)
