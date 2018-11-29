@@ -2,8 +2,6 @@ import sys
 import numpy as np
 import json
 import re
-import os
-
 
 
 def parse_file(text):
